@@ -640,6 +640,14 @@ const ConfigPatchRequestSchema = z
           .passthrough()
           .nullable()
           .optional(),
+        "web-fetch": z
+          .object({
+            mode: ServiceModeSchema.optional(),
+            provider: z.string().optional(),
+          })
+          .passthrough()
+          .nullable()
+          .optional(),
         "image-generation": z
           .object({ mode: ServiceModeSchema.optional() })
           .passthrough()

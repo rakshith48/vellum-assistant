@@ -28313,6 +28313,16 @@ components:
                       type: string
                   additionalProperties: {}
                 - type: "null"
+            web-fetch:
+              anyOf:
+                - type: object
+                  properties:
+                    mode:
+                      $ref: "#/components/schemas/ServiceMode"
+                    provider:
+                      type: string
+                  additionalProperties: {}
+                - type: "null"
             image-generation:
               anyOf:
                 - type: object
