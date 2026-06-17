@@ -152,6 +152,55 @@ describe("executeFirecrawlScrape", () => {
     expect(result.content).toContain("<no_content />");
   });
 
+  test("rejects URLs with embedded credentials instead of forwarding them", async () => {
+    let hit = false;
+    globalThis.fetch = (async () => {
+      hit = true;
+      return scrapeResponse({ success: true, data: { markdown: "x" } });
+    }) as any;
+
+    const result = await executeFirecrawlScrape(
+      { url: "https://user:secret@example.com/page" },
+      { apiKey: "fc-key" },
+    );
+    expect(hit).toBe(false); // never sent to Firecrawl
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("embedded credentials");
+    // The secret must not leak into the surfaced url/metadata.
+    expect(result.content).not.toContain("secret");
+  });
+
+  test("surfaces a payload-level failure on a 200 (success:false / error)", async () => {
+    globalThis.fetch = (async () =>
+      scrapeResponse({
+        success: false,
+        error: "This website is no longer supported",
+        data: {},
+      })) as any;
+
+    const result = await executeFirecrawlScrape(
+      { url: "https://example.com" },
+      { apiKey: "fc-key" },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("no longer supported");
+  });
+
+  test("surfaces invalid JSON as a clean error", async () => {
+    globalThis.fetch = (async () =>
+      new Response("<html>not json</html>", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as any;
+
+    const result = await executeFirecrawlScrape(
+      { url: "https://example.com" },
+      { apiKey: "fc-key" },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("invalid JSON");
+  });
+
   test.each([401, 403])("surfaces %d as an invalid-key error", async (status) => {
     globalThis.fetch = (async () =>
       new Response("Unauthorized", { status })) as any;

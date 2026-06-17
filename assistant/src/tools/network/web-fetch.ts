@@ -1142,6 +1142,18 @@ export async function executeFirecrawlScrape(
     );
   }
 
+  // Never forward URL-embedded credentials (user:password@host) to the hosted
+  // Firecrawl API. The built-in fetcher turns them into a Basic-auth header to
+  // the target; Firecrawl can't, so reject rather than leak them to a third
+  // party.
+  if (parsedUrl?.username || parsedUrl?.password) {
+    return firecrawlErrorResult(
+      safeRequestedUrl,
+      startedAt,
+      "URLs with embedded credentials are not supported by the Firecrawl provider. Remove the user:password@ portion of the URL.",
+    );
+  }
+
   const maxChars = clampInteger(
     input.max_chars,
     DEFAULT_MAX_CHARS,
@@ -1196,9 +1208,31 @@ export async function executeFirecrawlScrape(
     }
 
     if (response.ok) {
-      const json = (await response.json()) as FirecrawlScrapeResponse;
+      let json: FirecrawlScrapeResponse;
+      try {
+        json = (await response.json()) as FirecrawlScrapeResponse;
+      } catch {
+        return firecrawlErrorResult(
+          safeRequestedUrl,
+          startedAt,
+          "Firecrawl scrape returned an invalid JSON payload.",
+          response.status,
+        );
+      }
       const data = json.data ?? {};
       const fcMeta = data.metadata ?? {};
+      // A 200 can still carry a payload-level failure (success:false, a
+      // top-level error, or a per-page error in data.metadata). Surface it
+      // instead of treating an empty body as a successful "no content" scrape.
+      const payloadError = json.error ?? fcMeta.error;
+      if (json.success === false || payloadError) {
+        return firecrawlErrorResult(
+          safeRequestedUrl,
+          startedAt,
+          payloadError ?? "Firecrawl scrape failed.",
+          response.status,
+        );
+      }
       const processed = normalizeMarkdown(
         (data.markdown ?? "").replace(/\0/g, ""),
       );
