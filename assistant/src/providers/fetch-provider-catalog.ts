@@ -57,7 +57,6 @@ export const FETCH_PROVIDER_CATALOG: readonly FetchProviderCatalogEntry[] = [
   {
     id: "firecrawl",
     displayName: "Firecrawl",
-    displayNameLong: "Firecrawl Scrape",
     kind: "byok",
     apiKeyPrefix: "fc-...",
     envVar: "FIRECRAWL_API_KEY",

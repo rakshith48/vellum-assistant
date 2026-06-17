@@ -15883,6 +15883,7 @@ paths:
                                           - brave
                                           - perplexity
                                           - tavily
+                                          - firecrawl
                                       resultCount:
                                         type: number
                                       durationMs:
@@ -16265,6 +16266,7 @@ paths:
                                                   - brave
                                                   - perplexity
                                                   - tavily
+                                                  - firecrawl
                                               resultCount:
                                                 type: number
                                               durationMs:
@@ -29040,6 +29042,14 @@ components:
           type: object
           properties:
             web-search:
+              type: object
+              properties:
+                mode:
+                  $ref: "#/components/schemas/ServiceMode"
+                provider:
+                  type: string
+              additionalProperties: {}
+            web-fetch:
               type: object
               properties:
                 mode:

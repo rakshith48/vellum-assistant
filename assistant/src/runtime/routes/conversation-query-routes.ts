@@ -536,6 +536,13 @@ const ConfigGetResponseSchema = z
           })
           .passthrough()
           .optional(),
+        "web-fetch": z
+          .object({
+            mode: ServiceModeSchema.optional(),
+            provider: z.string().optional(),
+          })
+          .passthrough()
+          .optional(),
         "image-generation": z
           .object({ mode: ServiceModeSchema.optional() })
           .passthrough()
