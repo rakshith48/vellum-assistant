@@ -103,6 +103,7 @@ import { preserveHeartbeatEnabledForExistingWorkspacesMigration } from "./102-pr
 import { upgradeQualityProfileToOpus48Migration } from "./103-upgrade-quality-profile-to-opus-4-8.js";
 import { recheckAdaptiveThinkingModelImpliedAnthropicMigration } from "./104-recheck-adaptive-thinking-model-implied-anthropic.js";
 import { releaseNotesFirecrawlWebSearchMigration } from "./105-release-notes-firecrawl-web-search.js";
+import { releaseNotesFirecrawlWebFetchMigration } from "./106-release-notes-firecrawl-web-fetch.js";
 import { migrateToWorkspaceVolumeMigration } from "./migrate-to-workspace-volume.js";
 import type { WorkspaceMigration } from "./types.js";
 
@@ -217,4 +218,5 @@ export const WORKSPACE_MIGRATIONS: WorkspaceMigration[] = [
   upgradeQualityProfileToOpus48Migration,
   recheckAdaptiveThinkingModelImpliedAnthropicMigration,
   releaseNotesFirecrawlWebSearchMigration,
+  releaseNotesFirecrawlWebFetchMigration,
 ];
