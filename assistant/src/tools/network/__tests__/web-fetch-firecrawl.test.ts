@@ -37,14 +37,17 @@ mock.module("../../../permissions/types.js", () => ({
   RiskLevel: { Low: "low", Medium: "medium", High: "high" },
 }));
 
-// Keep real url-safety helpers (parseUrl, sanitize*, isPrivateOrLocalHost) but
-// stub DNS resolution so the built-in fallback path never makes a real network
-// request — a public host resolves to "no addresses", which short-circuits with
-// an "Unable to resolve host" error before any socket is opened.
+// Keep real url-safety helpers (parseUrl, sanitize*, isPrivateOrLocalHost,
+// resolveRequestAddress) but stub DNS resolution. The returned address list is
+// mutable per test: an empty list makes the built-in fallback path
+// short-circuit ("Unable to resolve host") before any socket is opened, while a
+// public address lets a Firecrawl-routed request through the dispatcher's DNS
+// safety gate. A private address exercises the "don't leak to Firecrawl" guard.
+let mockResolveAddresses: string[] = [];
 const realUrlSafety = await import("../url-safety.js");
 mock.module("../url-safety.js", () => ({
   ...realUrlSafety,
-  resolveHostAddresses: async () => [],
+  resolveHostAddresses: async () => mockResolveAddresses,
 }));
 
 const { executeFirecrawlScrape } = await import("../web-fetch.js");
@@ -244,6 +247,7 @@ describe("web_fetch provider dispatch", () => {
     originalFetch = globalThis.fetch;
     mockWebFetchProvider = "default";
     mockFirecrawlSecureKey = undefined;
+    mockResolveAddresses = [];
   });
   afterEach(() => {
     globalThis.fetch = originalFetch;
@@ -252,6 +256,7 @@ describe("web_fetch provider dispatch", () => {
   test("routes to Firecrawl when provider=firecrawl and a key is set", async () => {
     mockWebFetchProvider = "firecrawl";
     mockFirecrawlSecureKey = "fc-key";
+    mockResolveAddresses = ["93.184.216.34"]; // public → passes the DNS safety gate
     let hitUrl = "";
     globalThis.fetch = (async (url: string) => {
       hitUrl = url;
@@ -314,6 +319,42 @@ describe("web_fetch provider dispatch", () => {
     expect(firecrawlHit).toBe(false);
     expect(result.isError).toBe(true);
     expect(result.content.toLowerCase()).toContain("private");
+    expect(result.activityMetadata?.webFetch?.provider).toBe("default");
+  });
+
+  test("a public host that DNS-resolves to a private IP is not sent to Firecrawl", async () => {
+    mockWebFetchProvider = "firecrawl";
+    mockFirecrawlSecureKey = "fc-key";
+    mockResolveAddresses = ["10.0.0.5"]; // public name, private address → blocked
+    let firecrawlHit = false;
+    globalThis.fetch = (async (url: string) => {
+      if (typeof url === "string" && url.includes(SCRAPE_URL)) {
+        firecrawlHit = true;
+      }
+      return new Response("", { status: 200 });
+    }) as any;
+
+    const result = await execute({ url: "https://internal.example/secret?token=abc" });
+    expect(firecrawlHit).toBe(false); // internal URL never leaked to Firecrawl
+    expect(result.isError).toBe(true);
+    expect(result.activityMetadata?.webFetch?.provider).toBe("default");
+  });
+
+  test("non-http(s) schemes are not sent to Firecrawl", async () => {
+    mockWebFetchProvider = "firecrawl";
+    mockFirecrawlSecureKey = "fc-key";
+    mockResolveAddresses = ["93.184.216.34"];
+    let firecrawlHit = false;
+    globalThis.fetch = (async (url: string) => {
+      if (typeof url === "string" && url.includes(SCRAPE_URL)) {
+        firecrawlHit = true;
+      }
+      return new Response("", { status: 200 });
+    }) as any;
+
+    const result = await execute({ url: "ftp://example.com/file" });
+    expect(firecrawlHit).toBe(false);
+    expect(result.isError).toBe(true);
     expect(result.activityMetadata?.webFetch?.provider).toBe("default");
   });
 });

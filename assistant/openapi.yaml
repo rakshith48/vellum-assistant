@@ -15931,6 +15931,11 @@ paths:
                                         type: string
                                       finalUrl:
                                         type: string
+                                      provider:
+                                        type: string
+                                        enum:
+                                          - default
+                                          - firecrawl
                                       status:
                                         type: number
                                       contentType:
@@ -16314,6 +16319,11 @@ paths:
                                                 type: string
                                               finalUrl:
                                                 type: string
+                                              provider:
+                                                type: string
+                                                enum:
+                                                  - default
+                                                  - firecrawl
                                               status:
                                                 type: number
                                               contentType:

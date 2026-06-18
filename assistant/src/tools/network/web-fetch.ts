@@ -1083,6 +1083,44 @@ function getWebFetchProvider(): WebFetchProviderId {
   return configured === "firecrawl" ? "firecrawl" : "default";
 }
 
+/**
+ * Decide whether a request may be routed to the hosted Firecrawl provider.
+ *
+ * Posting a URL to Firecrawl sends its path + query (which can hold secrets) to
+ * a third party, so we apply the SAME safety gate as the built-in fetcher
+ * BEFORE dispatching — not just the lexical host check:
+ *   - only http(s) URLs (Firecrawl can't do other schemes anyway),
+ *   - never `allow_private_network` requests (those are intentionally local;
+ *     Firecrawl can't reach them and the built-in path owns that mode),
+ *   - and a DNS resolution check so a public hostname that resolves to a
+ *     private/blocked address (e.g. `internal.example` → 10.x.x.x) is NOT
+ *     leaked to Firecrawl.
+ * Anything that fails falls back to the built-in fetcher, which enforces its
+ * own SSRF rules and returns the appropriate error.
+ */
+async function canRouteToFirecrawl(
+  input: Record<string, unknown>,
+): Promise<boolean> {
+  if (input.allow_private_network === true) return false;
+  const parsed = parseUrl(input.url);
+  if (!parsed) return false;
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  if (isPrivateOrLocalHost(parsed.hostname)) return false;
+  try {
+    const resolution = await resolveRequestAddress(
+      parsed.hostname,
+      resolveHostAddresses,
+      false,
+    );
+    if (resolution.blockedAddress || resolution.addresses.length === 0) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 function firecrawlErrorResult(
   requestedUrl: string,
   startedAt: number,
@@ -1396,26 +1434,17 @@ export const webFetchTool = {
     input: Record<string, unknown>,
     context: ToolContext,
   ): Promise<ToolExecutionResult> {
-    if (getWebFetchProvider() === "firecrawl") {
-      const parsed = parseUrl(input.url);
-      // Private/local targets can't be reached by Firecrawl's hosted scraper,
-      // and the built-in fetcher owns the SSRF / allow_private_network rules —
-      // so route those (and unparseable URLs) to the built-in path.
-      const isLocalTarget = parsed
-        ? isPrivateOrLocalHost(parsed.hostname)
-        : false;
-      if (parsed && !isLocalTarget) {
-        const apiKey = await getProviderKeyAsync("firecrawl");
-        if (apiKey) {
-          return executeFirecrawlScrape(input, {
-            apiKey,
-            signal: context.signal,
-          });
-        }
-        log.info(
-          "web_fetch provider is firecrawl but no API key is configured; falling back to the built-in fetcher",
-        );
+    if (getWebFetchProvider() === "firecrawl" && (await canRouteToFirecrawl(input))) {
+      const apiKey = await getProviderKeyAsync("firecrawl");
+      if (apiKey) {
+        return executeFirecrawlScrape(input, {
+          apiKey,
+          signal: context.signal,
+        });
       }
+      log.info(
+        "web_fetch provider is firecrawl but no API key is configured; falling back to the built-in fetcher",
+      );
       // Fall through to the built-in fetcher.
     }
     return executeWebFetch(input, { signal: context.signal });
